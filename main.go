@@ -12,8 +12,9 @@ import (
 	"github.com/mogaika/flagrouter/router"
 )
 
-func DeliveryFunction(flag *router.Flag) {
+func DeliveryFunction(flag *router.Flag) error {
 	log.Printf("Flag delivered %+#v", flag)
+	return nil
 }
 
 func main() {
@@ -31,7 +32,11 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		reader.ReadString('\n')
-		if err := r.AddToQueue(router.PRIORITY_HIGH, fmt.Sprintf("YES_THIS_IS_FLAG_%d", rand.Int63()), "mogaika_script", "pwn2"); err != nil {
+		var priority byte = router.PRIORITY_HIGH
+		if rand.Int()%10 < 5 {
+			priority = router.PRIORITY_LOW
+		}
+		if err := r.AddToQueue(priority, fmt.Sprintf("YES_THIS_IS_FLAG_%d", rand.Int63()), "mogaika_script", "pwn2"); err != nil {
 			log.Fatalf("Error inserting: %v", err)
 		}
 	}

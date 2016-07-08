@@ -41,11 +41,13 @@ type Router struct {
 	Lock                sync.Mutex
 	FlagSendPeriod      time.Duration
 	threadCommunication chan int
-	DeliveryFunction    func(*Flag)
+	DeliveryFunction    func(*Flag) error
 }
 
-func NewRouter(databaseFile string, deliveryFunction func(*Flag), flagSendPeriod time.Duration) (*Router, error) {
+func NewRouter(databaseFile string, deliveryFunction func(*Flag) error, flagSendPeriod time.Duration) (*Router, error) {
 	db, err := gorm.Open("sqlite3", databaseFile)
+	db.LogMode(true)
+
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +65,10 @@ func NewRouter(databaseFile string, deliveryFunction func(*Flag), flagSendPeriod
 	}
 
 	go r.DeliveryThread()
+
 	go func(tc chan int) {
 		for {
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 150)
 			tc <- THREAD_TICK
 		}
 	}(r.threadCommunication)
@@ -89,16 +92,23 @@ func (r *Router) AddToQueue(priority byte, flag string, source string, task stri
 
 func (r *Router) ProcessFlagQueue() error {
 	f := &Flag{}
-	if err := r.DB.Where("status = ?", STATUS_QUEUED).Order("priority DESC").Order("timestamp").First(f).Error; err != nil {
+	if err := r.DB.Where("status = ?", STATUS_QUEUED).Order("priority DESC").Order("timestamp ASC").First(f).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil
 		} else {
 			return err
 		}
 	}
-	r.DeliveryFunction(f)
+
+	deliveryerr := r.DeliveryFunction(f)
 	r.LastDeliveryTime = time.Now()
-	return r.DB.Delete(f).Error
+
+	if deliveryerr != nil {
+		f.Status = STATUS_ERROR
+	} else {
+		f.Status = STATUS_DELIVERED
+	}
+	return r.DB.Select("status").Save(f).Error
 }
 
 func (r *Router) DeliveryThread() {

@@ -1,8 +1,8 @@
 package router
 
 import (
+	"errors"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -25,20 +25,19 @@ const (
 	THREAD_TICK
 )
 
+var ErrAlreadyQueued = errors.New("Flag already queued")
+
 type Flag struct {
 	Id        int
 	Priority  byte      `gorm:"not null"`
 	Flag      string    `gorm:"unique;not null"`
 	Timestamp time.Time `gorm:"not null"`
-	Source    string
-	Task      string
-	Status    byte `gorm:"not null"`
+	Status    byte      `gorm:"not null"`
 }
 
 type Router struct {
 	DB                  *gorm.DB
 	LastDeliveryTime    time.Time
-	Lock                sync.Mutex
 	FlagSendPeriod      time.Duration
 	threadCommunication chan int
 	DeliveryFunction    func(*Flag) error
@@ -46,7 +45,6 @@ type Router struct {
 
 func NewRouter(databaseFile string, deliveryFunction func(*Flag) error, flagSendPeriod time.Duration) (*Router, error) {
 	db, err := gorm.Open("sqlite3", databaseFile)
-	db.LogMode(true)
 
 	if err != nil {
 		return nil, err
@@ -76,13 +74,11 @@ func NewRouter(databaseFile string, deliveryFunction func(*Flag) error, flagSend
 	return r, nil
 }
 
-func (r *Router) AddToQueue(priority byte, flag string, source string, task string) error {
+func (r *Router) AddToQueue(priority byte, flag string) error {
 	err := r.DB.Create(&Flag{
 		Priority:  priority,
 		Flag:      flag,
 		Timestamp: time.Now(),
-		Source:    source,
-		Task:      task,
 		Status:    STATUS_QUEUED,
 	}).Error
 

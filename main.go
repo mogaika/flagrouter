@@ -3,12 +3,15 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"time"
 
+	"github.com/mogaika/flagrouter/provider"
+	_ "github.com/mogaika/flagrouter/provider/http"
+	_ "github.com/mogaika/flagrouter/provider/tcp"
+	_ "github.com/mogaika/flagrouter/provider/udp"
 	"github.com/mogaika/flagrouter/router"
 )
 
@@ -19,25 +22,20 @@ func DeliveryFunction(flag *router.Flag) error {
 
 func main() {
 	databaseFile := flag.String("db", "db.sqlite", "sqlite database file")
-	//serverAddr := flag.String("addr", "0.0.0.0", "listen ip")
-	//serverLowTcpPort := flag.Int("tcp", 100, "tcp low priority port")
 
 	r, err := router.NewRouter(*databaseFile, DeliveryFunction, time.Second)
 	if err != nil {
 		log.Fatalf("Cannot init router: %v", err)
 	}
 
+	provider.InitProviders(r)
+
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		reader.ReadString('\n')
-		var priority byte = router.PRIORITY_HIGH
-		if rand.Int()%10 < 5 {
-			priority = router.PRIORITY_LOW
-		}
-		if err := r.AddToQueue(priority, fmt.Sprintf("YES_THIS_IS_FLAG_%d", rand.Int63()), "mogaika_script", "pwn2"); err != nil {
-			log.Fatalf("Error inserting: %v", err)
+		if str, err := reader.ReadString('\n'); err != nil || str == "q\n" || str == "quit\n" || str == "exit\n" {
+			break
 		}
 	}
 
